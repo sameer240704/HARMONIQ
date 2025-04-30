@@ -1,0 +1,46 @@
+2025-05-01 03:48:07,473 - INFO - Starting data initialization for 5 banks
+2025-05-01 03:48:07,473 - INFO - Processing bank: IDFC First Bank
+2025-05-01 03:48:07,473 - INFO - Starting data fetch for IDFC First Bank
+2025-05-01 03:48:07,473 - INFO - Fetching stock data for IDFC First Bank (IDFCFIRSTB.BO)
+2025-05-01 03:48:07,753 - INFO - Fetching financial metrics for IDFC First Bank
+2025-05-01 03:48:08,713 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=OVERVIEW&symbol=IDFCFIRSTB.BO&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:48:08,713 - INFO - Fetching cloud adoption metrics for IDFC First Bank
+2025-05-01 03:48:09,493 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol=IDFCFIRSTB.BO&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:48:42,629 - INFO - Storing data for IDFC First Bank in database
+2025-05-01 03:48:42,645 - INFO - Successfully stored 361 records for IDFC First Bank
+2025-05-01 03:48:42,645 - INFO - Processing bank: SBI
+2025-05-01 03:48:42,645 - INFO - Starting data fetch for SBI
+2025-05-01 03:48:42,645 - INFO - Fetching stock data for SBI (SBIN.NS)
+2025-05-01 03:48:42,800 - INFO - Fetching financial metrics for SBI
+2025-05-01 03:48:43,541 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=OVERVIEW&symbol=SBIN.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:48:43,541 - INFO - Fetching cloud adoption metrics for SBI
+2025-05-01 03:48:43,954 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol=SBIN.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:49:19,595 - INFO - Storing data for SBI in database
+2025-05-01 03:49:19,609 - INFO - Successfully stored 365 records for SBI
+2025-05-01 03:49:19,609 - INFO - Processing bank: HDFC Bank
+2025-05-01 03:49:19,609 - INFO - Starting data fetch for HDFC Bank
+2025-05-01 03:49:19,609 - INFO - Fetching stock data for HDFC Bank (HDFCBANK.NS)
+2025-05-01 03:49:19,749 - INFO - Fetching financial metrics for HDFC Bank
+2025-05-01 03:49:20,614 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=OVERVIEW&symbol=HDFCBANK.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:49:20,615 - INFO - Fetching cloud adoption metrics for HDFC Bank
+2025-05-01 03:49:21,536 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol=HDFCBANK.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:49:54,921 - INFO - Storing data for HDFC Bank in database
+2025-05-01 03:49:54,960 - INFO - Successfully stored 365 records for HDFC Bank
+2025-05-01 03:49:54,960 - INFO - Processing bank: ICICI Bank
+2025-05-01 03:49:54,960 - INFO - Starting data fetch for ICICI Bank
+2025-05-01 03:49:54,960 - INFO - Fetching stock data for ICICI Bank (ICICIBANK.NS)
+2025-05-01 03:49:55,094 - INFO - Fetching financial metrics for ICICI Bank
+2025-05-01 03:49:55,995 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=OVERVIEW&symbol=ICICIBANK.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:49:55,996 - INFO - Fetching cloud adoption metrics for ICICI Bank
+2025-05-01 03:49:56,322 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol=ICICIBANK.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:50:30,936 - INFO - Storing data for ICICI Bank in database
+2025-05-01 03:50:30,949 - INFO - Successfully stored 365 records for ICICI Bank
+2025-05-01 03:50:30,950 - INFO - Processing bank: Axis Bank
+2025-05-01 03:50:30,950 - INFO - Starting data fetch for Axis Bank
+2025-05-01 03:50:30,950 - INFO - Fetching stock data for Axis Bank (AXISBANK.NS)
+2025-05-01 03:50:31,103 - INFO - Fetching financial metrics for Axis Bank
+2025-05-01 03:50:32,090 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=OVERVIEW&symbol=AXISBANK.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:50:32,091 - INFO - Fetching cloud adoption metrics for Axis Bank
+2025-05-01 03:50:33,011 - INFO - HTTP Request: GET https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol=AXISBANK.NS&apikey=VD6HAH33C0LBSTL1 "HTTP/1.1 200 OK"
+2025-05-01 03:51:10,154 - INFO - Storing data for Axis Bank in database
+2025-05-01 03:51:10,158 - INFO - Successfully stored 365 records for Axis Bank
