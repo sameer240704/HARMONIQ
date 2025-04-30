@@ -48,19 +48,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import { Logo } from "@/public/images";
-
-const API_BASE_URL = "http://localhost:8000";
-
-const bankColors = {
-  "IDFC First Bank": "#6366f1",
-  SBI: "#3b82f6",
-  "Punjab National Bank": "#14b8a6",
-  "HDFC Bank": "#f59e0b",
-  "ICICI Bank": "#ef4444",
-  "Axis Bank": "#8b5cf6",
-  "Canara Bank": "#10b981",
-  "Kotak Mahindra Bank": "#ec4899",
-};
+import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/constants/utils";
+import { bankColors } from "@/constants/data";
 
 export default function Dashboard() {
   const [selectedBanks, setSelectedBanks] = useState([]);
@@ -75,6 +65,8 @@ export default function Dashboard() {
   const [isMobile, setIsMobile] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
+
+  const router = useRouter();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -264,7 +256,7 @@ export default function Dashboard() {
           isScrolled ? "opacity-0" : "opacity-100"
         }`}
       >
-        <div className="container mx-auto max-w-7xl px-5">
+        <div className="container mx-auto max-w-7xl px-5 mb-5">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex justify-center items-center gap-3">
               <Image src={Logo} alt="Logo" className="h-10 w-auto rounded-md" />
@@ -673,7 +665,8 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs flex items-center gap-1"
+                className="text-xs flex items-center gap-1 cursor-pointer"
+                onClick={() => router.push("/news")}
               >
                 View All <ChevronRight className="h-3 w-3" />
               </Button>
