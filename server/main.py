@@ -3,17 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 import pandas as pd
 import plotly.graph_objects as go
-import sqlite3, os, httpx, requests
+import sqlite3, os, httpx, nltk, json, logging
 from datetime import datetime, timedelta
 from data_fetcher import fetch_fintech_news
 from data_types import BankDataInput, AnalysisRequest
-from analysis import analyze_bank_performance, predict_future_trends, calculate_digital_adoption_metrics, compare_banks_technology_spending
+from analysis import analyze_bank_performance, create_stock_trend_chart, create_correlation_chart, handle_json
 from nltk.sentiment import SentimentIntensityAnalyzer
 from tavily import TavilyClient
 import numpy as np
 import yfinance as yf
-import nltk
-import logging
 from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 
@@ -243,7 +241,10 @@ async def fetch_and_store_bank_data(bank_name: str):
             if col not in df.columns:
                 df[col] = 0  # or appropriate default value
                 
-        df = df[required_columns]
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = 0.0 if col == 'it_sentiment' else 0 
+            df[col] = df[col].fillna(0).astype(float if 'sentiment' in col else int)
         
         logger.info(f"Storing data for {bank_name} in database")
         conn = sqlite3.connect(DATABASE)
@@ -291,8 +292,15 @@ async def get_financial_metrics(bank_name: str):
     """Get stored financial metrics for analysis"""
     conn = sqlite3.connect(DATABASE)
     query = '''
-        SELECT date, stock_price, pe_ratio, rnd_expenses, 
-               it_news_count, digital_mentions, cloud_adoption_score
+        SELECT 
+            date, 
+            stock_price, 
+            pe_ratio, 
+            rnd_expenses, 
+            COALESCE(it_news_count, 0) as it_news_count,
+            COALESCE(it_sentiment, 0) as it_sentiment,
+            digital_mentions, 
+            cloud_adoption_score
         FROM bank_analysis
         WHERE bank_name = ?
         ORDER BY date DESC
@@ -307,10 +315,10 @@ async def get_financial_metrics(bank_name: str):
     return {
         "timeline": df.to_dict(orient='records'),
         "stats": {
-            "avg_it_news": df['it_news_count'].mean(),
-            "avg_sentiment": df['it_sentiment'].mean(),
-            "rnd_growth": df['rnd_expenses'].pct_change().mean(),
-            "cloud_adoption": df['cloud_adoption_score'].iloc[0]
+            "avg_it_news": df.get('it_news_count', pd.Series([0])).mean(),
+            "avg_sentiment": df.get('it_sentiment', pd.Series([0])).mean(),
+            "rnd_growth": df.get('rnd_expenses', pd.Series([0])).pct_change().mean(),
+            "cloud_adoption": df.get('cloud_adoption_score', pd.Series([0])).iloc[0]
         }
     }
 
@@ -375,7 +383,7 @@ async def get_fintech_news(keywords: List[str] = Query(["digital banking", "fint
         return {"news": news}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -60,11 +60,14 @@ export default function Dashboard() {
     end: new Date(),
   });
   const [analysisResults, setAnalysisResults] = useState(null);
+  const [bankFinancialData, setBankFinancialData] = useState({});
+  const [bankComparisonData, setBankComparisonData] = useState([]);
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [activeBank, setActiveBank] = useState(null);
 
   const router = useRouter();
 
@@ -119,10 +122,10 @@ export default function Dashboard() {
   };
 
   const runAnalysis = async () => {
-    if (selectedBanks.length === 0 || selectedMetrics.length === 0) {
+    if (selectedBanks.length === 0) {
       toast({
         title: "Error",
-        description: "Please select at least one bank and one metric",
+        description: "Please select at least one bank",
         variant: "destructive",
       });
       return;
@@ -130,18 +133,75 @@ export default function Dashboard() {
 
     try {
       setLoading(true);
+      setActiveBank(selectedBanks[0]);
 
-      const response = await axios.post(
-        `${API_BASE_URL}/analyze-bank-performance`,
-        {
-          bank_names: selectedBanks,
-          start_date: format(dateRange.start, "yyyy-MM-dd"),
-          end_date: format(dateRange.end, "yyyy-MM-dd"),
-          metrics: selectedMetrics,
-        }
+      // Create an object to store all the data
+      const resultsData = {
+        stock_price: {},
+        it_efficiency: {},
+        digital_transactions: {},
+      };
+
+      // 1. Fetch individual financial metrics for each bank
+      const financialDataPromises = selectedBanks.map((bankName) =>
+        axios.get(
+          `${API_BASE_URL}/financial-metrics?bank_name=${encodeURIComponent(
+            bankName
+          )}`
+        )
       );
 
-      setAnalysisResults(response.data);
+      const financialResults = await Promise.all(financialDataPromises);
+      const bankFinancialMap = {};
+
+      financialResults.forEach((result, index) => {
+        const bankName = selectedBanks[index];
+        bankFinancialMap[bankName] = result.data;
+
+        // Add stock price data to results
+        resultsData.stock_price[bankName] = result.data.timeline.map(
+          (entry) => ({
+            date: entry.date,
+            value: entry.stock_price,
+          })
+        );
+
+        // Create synthetic IT efficiency data based on available metrics
+        resultsData.it_efficiency[bankName] = {
+          value: result.data.stats.cloud_adoption * 10, // Scale for visualization
+          growth: result.data.stats.rnd_growth * 100,
+        };
+
+        // Add digital transactions data (using digital_mentions as proxy)
+        resultsData.digital_transactions[bankName] = {
+          mean: result.data.stats.avg_it_news,
+          growth_rate: result.data.stats.rnd_growth * 100, // Using R&D growth as proxy
+        };
+      });
+
+      setBankFinancialData(bankFinancialMap);
+
+      // 2. Fetch comparison data for all selected banks
+      if (selectedBanks.length > 1) {
+        const comparisonResponse = await axios.get(
+          `${API_BASE_URL}/compare-banks?${selectedBanks
+            .map((bank) => `bank_names=${encodeURIComponent(bank)}`)
+            .join("&")}`
+        );
+        setBankComparisonData(comparisonResponse.data);
+      }
+
+      // 3. If we have a specific bank selected, get the detailed IT impact analysis
+      if (activeBank) {
+        const detailResponse = await axios.get(
+          `${API_BASE_URL}/it-impact-analysis?bank_name=${encodeURIComponent(
+            activeBank
+          )}`
+        );
+        // Additional data can be integrated here
+      }
+
+      setAnalysisResults(resultsData);
       toast({
         title: "Success",
         description: "Analysis completed successfully",
@@ -169,7 +229,7 @@ export default function Dashboard() {
       },
       {
         title: "Metrics Evaluated",
-        value: selectedMetrics.length,
+        value: selectedMetrics.length > 0 ? selectedMetrics.length : "All",
         icon: <PieChart className="text-purple-500" />,
       },
       {
@@ -209,6 +269,138 @@ export default function Dashboard() {
       .split(" ")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
+  };
+
+  const renderBankMetricsTable = () => {
+    if (!bankFinancialData || Object.keys(bankFinancialData).length === 0)
+      return null;
+
+    return (
+      <Card className="shadow-sm border-0">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                <TableRow>
+                  <TableHead className="text-left font-semibold">
+                    Bank
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    Avg IT News
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    Avg Sentiment
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    R&D Growth
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    Cloud Adoption
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(bankFinancialData).map(([bank, data]) => (
+                  <TableRow
+                    key={bank}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  >
+                    <TableCell className="font-medium flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{
+                          backgroundColor: bankColors[bank] || "#CBD5E1",
+                        }}
+                      />
+                      {bank}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {data.stats.avg_it_news.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {data.stats.avg_sentiment.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span
+                        className={
+                          data.stats.rnd_growth >= 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }
+                      >
+                        {(data.stats.rnd_growth * 100).toFixed(2)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {data.stats.cloud_adoption.toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderComparisonTable = () => {
+    if (!bankComparisonData || bankComparisonData.length === 0) return null;
+
+    return (
+      <Card className="shadow-sm border-0">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                <TableRow>
+                  <TableHead className="text-left font-semibold">
+                    Bank
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    Avg R&D
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    Total IT News
+                  </TableHead>
+                  <TableHead className="text-right font-semibold">
+                    Cloud Score
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bankComparisonData.map((item) => (
+                  <TableRow
+                    key={item.bank_name}
+                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  >
+                    <TableCell className="font-medium flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 rounded-full"
+                        style={{
+                          backgroundColor:
+                            bankColors[item.bank_name] || "#CBD5E1",
+                        }}
+                      />
+                      {item.bank_name}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.avg_rnd.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.total_it_news}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {item.cloud_score.toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -460,61 +652,7 @@ export default function Dashboard() {
                         </TabsContent>
 
                         <TabsContent value="metrics" className="pt-6">
-                          <Card className="shadow-sm border-0">
-                            <CardContent className="p-0">
-                              <div className="overflow-x-auto">
-                                <Table>
-                                  <TableHeader className="bg-gray-50 dark:bg-gray-800">
-                                    <TableRow>
-                                      <TableHead className="text-left font-semibold">
-                                        Bank
-                                      </TableHead>
-                                      {selectedMetrics.map((metric) => (
-                                        <TableHead
-                                          key={metric}
-                                          className="text-right font-semibold"
-                                        >
-                                          {formatMetricName(metric)}
-                                        </TableHead>
-                                      ))}
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {selectedBanks.map((bank) => (
-                                      <TableRow
-                                        key={bank}
-                                        className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                                      >
-                                        <TableCell className="font-medium flex items-center gap-2">
-                                          <div
-                                            className="h-3 w-3 rounded-full"
-                                            style={{
-                                              backgroundColor:
-                                                bankColors[bank] || "#CBD5E1",
-                                            }}
-                                          />
-                                          {bank}
-                                        </TableCell>
-                                        {selectedMetrics.map((metric) => {
-                                          const value =
-                                            analysisResults[metric]?.[bank]
-                                              ?.mean;
-                                          return (
-                                            <TableCell
-                                              key={`${bank}-${metric}`}
-                                              className="text-right"
-                                            >
-                                              {value ? value.toFixed(2) : "N/A"}
-                                            </TableCell>
-                                          );
-                                        })}
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            </CardContent>
-                          </Card>
+                          {renderBankMetricsTable()}
                         </TabsContent>
 
                         <TabsContent value="comparison" className="pt-6">
@@ -536,80 +674,7 @@ export default function Dashboard() {
                             )}
                           </div>
 
-                          <Card className="shadow-sm border-0">
-                            <CardContent className="p-0">
-                              <div className="overflow-x-auto">
-                                <Table>
-                                  <TableHeader className="bg-gray-50 dark:bg-gray-800">
-                                    <TableRow>
-                                      <TableHead className="text-left font-semibold">
-                                        Metric
-                                      </TableHead>
-                                      {selectedBanks.map((bank) => (
-                                        <TableHead
-                                          key={bank}
-                                          className="text-right font-semibold"
-                                        >
-                                          {bank}
-                                        </TableHead>
-                                      ))}
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                      <TableCell className="font-medium">
-                                        IT Efficiency
-                                      </TableCell>
-                                      {selectedBanks.map((bank) => {
-                                        const value =
-                                          analysisResults.it_efficiency?.[bank];
-                                        return (
-                                          <TableCell
-                                            key={`${bank}-efficiency`}
-                                            className="text-right"
-                                          >
-                                            {value ? value.toFixed(2) : "N/A"}
-                                          </TableCell>
-                                        );
-                                      })}
-                                    </TableRow>
-                                    <TableRow className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                      <TableCell className="font-medium">
-                                        Growth Rate
-                                      </TableCell>
-                                      {selectedBanks.map((bank) => {
-                                        const value =
-                                          analysisResults
-                                            .digital_transactions?.[bank]
-                                            ?.growth_rate;
-                                        return (
-                                          <TableCell
-                                            key={`${bank}-growth`}
-                                            className="text-right"
-                                          >
-                                            {value ? (
-                                              <span
-                                                className={
-                                                  value > 0
-                                                    ? "text-green-600"
-                                                    : "text-red-600"
-                                                }
-                                              >
-                                                {value > 0 ? "+" : ""}
-                                                {value.toFixed(2)}%
-                                              </span>
-                                            ) : (
-                                              "N/A"
-                                            )}
-                                          </TableCell>
-                                        );
-                                      })}
-                                    </TableRow>
-                                  </TableBody>
-                                </Table>
-                              </div>
-                            </CardContent>
-                          </Card>
+                          {renderComparisonTable()}
                         </TabsContent>
                       </Tabs>
                     </>
@@ -630,11 +695,7 @@ export default function Dashboard() {
                       <Button
                         variant="primary"
                         onClick={runAnalysis}
-                        disabled={
-                          selectedBanks.length === 0 ||
-                          selectedMetrics.length === 0 ||
-                          loading
-                        }
+                        disabled={selectedBanks.length === 0 || loading}
                         className="mt-2 text-white"
                       >
                         {loading ? (

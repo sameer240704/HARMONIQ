@@ -10,12 +10,9 @@ import {
 export const bankColors = {
     "IDFC First Bank": "#6366f1",
     SBI: "#3b82f6",
-    "Punjab National Bank": "#14b8a6",
     "HDFC Bank": "#f59e0b",
     "ICICI Bank": "#ef4444",
     "Axis Bank": "#8b5cf6",
-    "Canara Bank": "#10b981",
-    "Kotak Mahindra Bank": "#ec4899",
 };
 
 export const CATEGORIES = [

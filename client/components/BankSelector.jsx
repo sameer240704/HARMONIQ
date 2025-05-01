@@ -19,12 +19,9 @@ import {
 const banks = [
   "IDFC First Bank",
   "SBI",
-  "Punjab National Bank",
   "HDFC Bank",
   "ICICI Bank",
   "Axis Bank",
-  "Canara Bank",
-  "Kotak Mahindra Bank",
 ];
 
 export function BankSelector({ selectedBanks, onSelect, className }) {

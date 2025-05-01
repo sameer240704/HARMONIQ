@@ -1,246 +1,92 @@
 import pandas as pd
 import numpy as np
-from prophet import Prophet
 import plotly.graph_objects as go
-from prophet import Prophet
+from typing import Dict, List
 
-def analyze_bank_performance(df, metrics):
-    """
-    Analyze bank performance based on selected metrics
-    """
-    results = {}
+def analyze_bank_performance(df: pd.DataFrame, metrics: List[str]) -> Dict:
+    """Comprehensive analysis of bank performance data"""
+    analysis = {}
     
-    # Convert date to datetime if it's not already
-    if not pd.api.types.is_datetime64_any_dtype(df['date']):
-        df['date'] = pd.to_datetime(df['date'])
+    # Add basic statistics
+    analysis['basic_stats'] = df.groupby('bank_name')[metrics].agg(['mean', 'median', 'std', 'min', 'max'])
     
-    # Group by bank and calculate metrics
-    grouped = df.groupby('bank_name')
-    
+    # Add trend analysis
+    analysis['trends'] = {}
     for metric in metrics:
-        if metric not in df.columns:
-            continue
-            
-        metric_results = {}
-        
-        for bank, data in grouped:
-            # Basic statistics
-            metric_data = data[metric]
-            metric_results[bank] = {
-                'mean': float(metric_data.mean()),
-                'median': float(metric_data.median()),
-                'std_dev': float(metric_data.std()),
-                'min': float(metric_data.min()),
-                'max': float(metric_data.max()),
-                'growth_rate': float(calculate_growth_rate(metric_data)) if calculate_growth_rate(metric_data) is not None else None,
-                'correlation_with_it': float(calculate_correlation(data, metric, 'it_spending')) if calculate_correlation(data, metric, 'it_spending') is not None else None
-            }
-        
-        results[metric] = metric_results
+        analysis['trends'][metric] = {
+            '30_day_ma': df.groupby('date')[metric].mean().rolling(30).mean().to_dict(),
+            'growth_rate': df.groupby('bank_name')[metric].apply(
+                lambda x: x.pct_change().mean() * 100
+            ).to_dict()
+        }
     
-    # Calculate IT efficiency metrics
-    it_efficiency = {}
-    for bank, data in grouped:
-        try:
-            efficiency = (data['digital_transactions'].mean() / data['it_spending'].mean()) * 100
-            it_efficiency[bank] = float(efficiency)
-        except:
-            it_efficiency[bank] = None
+    # Add correlation matrix
+    analysis['correlations'] = df[metrics].corr().to_dict()
     
-    results['it_efficiency'] = it_efficiency
+    # Add performance comparison
+    analysis['comparison'] = {}
+    for metric in metrics:
+        analysis['comparison'][metric] = {
+            'best_performer': df.groupby('bank_name')[metric].mean().idxmax(),
+            'worst_performer': df.groupby('bank_name')[metric].mean().idxmin(),
+            'industry_average': df[metric].mean()
+        }
     
-    return results
+    # Generate visualization data
+    analysis['visualizations'] = {
+        'stock_price_trend': create_stock_trend_chart(df).to_json(),
+        'it_spending_correlation': create_correlation_chart(df).to_json()
+    }
+    
+    return analysis
 
-def calculate_growth_rate(series):
-    """
-    Calculate compound annual growth rate (CAGR)
-    """
-    if len(series) < 2:
-        return None
-    start = series.iloc[0]
-    end = series.iloc[-1]
-    periods = len(series)
-    if start <= 0:
-        return None
-    return (end / start) ** (1/periods) - 1
-
-def calculate_correlation(data, metric1, metric2):
-    """
-    Calculate correlation between two metrics
-    """
-    if metric1 not in data.columns or metric2 not in data.columns:
-        return None
-    return data[[metric1, metric2]].corr().iloc[0,1]
-
-def predict_future_trends(df, periods=365):
-    """
-    Predict future trends using Facebook Prophet
-    """
-    # Prepare data for Prophet
-    prophet_df = df.rename(columns={'date': 'ds', 'value': 'y'})
-    
-    # Convert date to datetime if it's not already
-    if not pd.api.types.is_datetime64_any_dtype(prophet_df['ds']):
-        prophet_df['ds'] = pd.to_datetime(prophet_df['ds'])
-    
-    # Initialize and fit model
-    model = Prophet(
-        yearly_seasonality=True,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        changepoint_prior_scale=0.05
-    )
-    model.fit(prophet_df)
-    
-    # Make future dataframe
-    future = model.make_future_dataframe(periods=periods)
-    
-    # Forecast
-    forecast = model.predict(future)
-    
-    # Create plotly figure
+def create_stock_trend_chart(df: pd.DataFrame) -> go.Figure:
+    """Create interactive stock price trend chart"""
     fig = go.Figure()
     
-    # Add actual data
-    fig.add_trace(go.Scatter(
-        x=prophet_df['ds'],
-        y=prophet_df['y'],
-        name='Actual',
-        mode='markers'
-    ))
+    for bank in df['bank_name'].unique():
+        bank_df = df[df['bank_name'] == bank]
+        fig.add_trace(go.Scatter(
+            x=bank_df['date'],
+            y=bank_df['stock_price'],
+            name=bank,
+            mode='lines+markers'
+        ))
     
-    # Add forecast
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat'],
-        name='Forecast',
-        line=dict(color='royalblue')
-    ))
-    
-    # Add uncertainty interval
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat_upper'],
-        fill=None,
-        mode='lines',
-        line=dict(width=0),
-        showlegend=False
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'],
-        y=forecast['yhat_lower'],
-        fill='tonexty',
-        mode='lines',
-        line=dict(width=0),
-        name='Uncertainty'
-    ))
-    
-    # Convert figure to dict
-    plot_json = fig.to_dict()
-    
-    # Prepare forecast data
-    forecast_data = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(periods)
-    forecast_data = forecast_data.rename(columns={
-        'ds': 'date',
-        'yhat': 'prediction',
-        'yhat_lower': 'lower_bound',
-        'yhat_upper': 'upper_bound'
-    })
-    
-    # Convert datetime to string to make it JSON serializable
-    forecast_data['date'] = forecast_data['date'].dt.strftime('%Y-%m-%d')
-    
-    # Create a simplified components dict since model.plot_components() returns a figure
-    components = {
-        'trend': forecast[['ds', 'trend']].tail(periods).to_dict('records'),
-        'yearly': forecast[['ds', 'yearly']].tail(periods).to_dict('records') if 'yearly' in forecast.columns else None,
-        'weekly': forecast[['ds', 'weekly']].tail(periods).to_dict('records') if 'weekly' in forecast.columns else None
-    }
-    
-    return {
-        'plot': plot_json,
-        'forecast': forecast_data.to_dict('records'),
-        'trend_components': components
-    }
+    fig.update_layout(
+        title='Stock Price Trends',
+        xaxis_title='Date',
+        yaxis_title='Stock Price',
+        hovermode='x unified'
+    )
+    return fig
 
-def calculate_digital_adoption_metrics(df):
-    """
-    Calculate digital adoption metrics and trends
-    """
-    results = {}
+def create_correlation_chart(df: pd.DataFrame) -> go.Figure:
+    """Create correlation heatmap"""
+    corr = df[['stock_price', 'it_news_count', 'rnd_expenses', 'digital_mentions']].corr()
     
-    # Ensure date is datetime
-    if not pd.api.types.is_datetime64_any_dtype(df['date']):
-        df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date')
+    fig = go.Figure(data=go.Heatmap(
+        z=corr.values,
+        x=corr.columns,
+        y=corr.columns,
+        colorscale='Blues',
+        zmin=-1,
+        zmax=1
+    ))
     
-    # Calculate growth rates
-    for metric in ['digital_transactions', 'mobile_users', 'it_spending']:
-        if metric not in df.columns:
-            continue
-            
-        # Calculate monthly growth rate
-        df[f'{metric}_growth'] = df[metric].pct_change() * 100
-        
-        # Fit linear regression to estimate trend
-        X = (df['date'] - df['date'].min()).dt.days.values.reshape(-1, 1)
-        y = df[metric].values
-        from sklearn.linear_model import LinearRegression
-        from sklearn.metrics import r2_score
-        model = LinearRegression().fit(X, y)
-        trend = model.predict(X)
-        r2 = r2_score(y, trend)
-        
-        # Convert datetime to string for JSON serialization
-        dates_str = df['date'].dt.strftime('%Y-%m-%d').tolist()
-        
-        results[metric] = {
-            'current_value': float(df[metric].iloc[-1]),
-            'growth_rate': float(df[f'{metric}_growth'].iloc[-1]) if not pd.isna(df[f'{metric}_growth'].iloc[-1]) else None,
-            'avg_growth_rate': float(df[f'{metric}_growth'].mean()) if not pd.isna(df[f'{metric}_growth'].mean()) else None,
-            'trend_strength': float(r2),
-            'historical_data': [{'date': date, metric: float(value)} for date, value in zip(dates_str, df[metric].tolist())]
-        }
-    
-    # Calculate adoption efficiency (transactions per IT dollar)
-    if 'digital_transactions' in df.columns and 'it_spending' in df.columns:
-        df['adoption_efficiency'] = df['digital_transactions'] / df['it_spending']
-        dates_str = df['date'].dt.strftime('%Y-%m-%d').tolist()
-        results['adoption_efficiency'] = {
-            'current_value': float(df['adoption_efficiency'].iloc[-1]),
-            'historical_data': [{'date': date, 'adoption_efficiency': float(value)} for date, value in zip(dates_str, df['adoption_efficiency'].tolist())]
-        }
-    
-    return results
+    fig.update_layout(
+        title='Metrics Correlation Matrix',
+        xaxis_title='Metrics',
+        yaxis_title='Metrics'
+    )
+    return fig
 
-def compare_banks_technology_spending(df):
-    """
-    Compare technology spending and outcomes across banks
-    """
-    results = {}
-    
-    # Calculate averages
-    avg_metrics = df.groupby('bank_name')[['avg_it_spending', 'avg_digital_transactions', 'avg_mobile_users']].mean()
-    
-    # Calculate ROI metrics
-    avg_metrics['transactions_per_it_dollar'] = avg_metrics['avg_digital_transactions'] / avg_metrics['avg_it_spending']
-    avg_metrics['users_per_it_dollar'] = avg_metrics['avg_mobile_users'] / avg_metrics['avg_it_spending']
-    
-    # Convert to dict and ensure all values are JSON serializable
-    avg_metrics_dict = {}
-    for bank in avg_metrics.index:
-        avg_metrics_dict[bank] = {k: float(v) for k, v in avg_metrics.loc[bank].to_dict().items()}
-    
-    results['average_metrics'] = avg_metrics_dict
-    
-    # Prepare data for visualizations (simplified since correlation cannot be calculated with just average values)
-    visualization_data = {
-        'it_spending': [{'bank_name': bank, 'value': float(value)} for bank, value in zip(df['bank_name'], df['avg_it_spending'])],
-        'digital_transactions': [{'bank_name': bank, 'value': float(value)} for bank, value in zip(df['bank_name'], df['avg_digital_transactions'])],
-        'mobile_users': [{'bank_name': bank, 'value': float(value)} for bank, value in zip(df['bank_name'], df['avg_mobile_users'])]
-    }
-    
-    results['visualization_data'] = visualization_data
-    
-    return results
+def handle_json(obj):
+    """Convert numpy types to Python native types for JSON serialization"""
+    if isinstance(obj, (np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, pd.Timestamp):
+        return obj.strftime('%Y-%m-%d')
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
