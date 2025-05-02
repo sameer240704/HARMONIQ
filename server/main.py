@@ -3,8 +3,8 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Any, Dict
 import pandas as pd
-import sqlite3, os, httpx, nltk, json, logging
-from datetime import datetime, timedelta
+import sqlite3, os, nltk, json, logging
+from datetime import datetime
 from data_fetcher import fetch_fintech_news
 from data_types import BankDataInput, AnalysisRequest
 from analysis import analyze_bank_performance, create_stock_trend_chart, create_correlation_chart, handle_json
@@ -17,7 +17,6 @@ import math, random
 from faker import Faker
 from scipy.stats import norm, skew, kurtosis
 from arch import arch_model
-import quantstats as qs
 
 load_dotenv()
 
