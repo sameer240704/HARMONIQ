@@ -22,6 +22,7 @@ const banks = [
   "HDFC Bank",
   "ICICI Bank",
   "Axis Bank",
+  "Kotak Mahindra Bank",
 ];
 
 export function BankSelector({ selectedBanks, onSelect, className }) {

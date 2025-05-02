@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { format } from "date-fns";
 import {
   Loader2,
   Download,
@@ -43,6 +42,8 @@ import { toast } from "sonner";
 import {
   GrowthRateChart,
   ITEfficiencyChart,
+  MonteCarloForecastChart,
+  RiskMetricsRadarChart,
   StockPriceChart,
 } from "@/components/Charts";
 import { Badge } from "@/components/ui/badge";
@@ -61,13 +62,20 @@ export default function Dashboard() {
   });
   const [analysisResults, setAnalysisResults] = useState(null);
   const [bankFinancialData, setBankFinancialData] = useState({});
-  const [bankComparisonData, setBankComparisonData] = useState([]);
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [activeBank, setActiveBank] = useState(null);
+  const [riskMetrics, setRiskMetrics] = useState({});
+  const [monteCarloForecast, setMonteCarloForecast] = useState(null);
+
+  const MemoStockChart = React.memo(StockPriceChart);
+  const MemoGrowthChart = React.memo(GrowthRateChart);
+  const MemoEfficiencyChart = React.memo(ITEfficiencyChart);
+  const MemoRiskMetricsRadarChart = React.memo(RiskMetricsRadarChart);
+  const MemoMonteCarloForecastChart = React.memo(MonteCarloForecastChart);
 
   const router = useRouter();
 
@@ -107,6 +115,13 @@ export default function Dashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    if (selectedBanks.length > 0) {
+      fetchRiskMetrics(selectedBanks[0]);
+      fetchMonteCarloForecast(selectedBanks[0]);
+    }
+  }, [selectedBanks]);
+
   const fetchNews = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/fetch-fintech-news`);
@@ -135,14 +150,15 @@ export default function Dashboard() {
       setLoading(true);
       setActiveBank(selectedBanks[0]);
 
-      // Create an object to store all the data
       const resultsData = {
         stock_price: {},
         it_efficiency: {},
         digital_transactions: {},
+        stats: {},
+        comparison: [],
       };
 
-      // 1. Fetch individual financial metrics for each bank
+      // Fetch financial data for each bank
       const financialDataPromises = selectedBanks.map((bankName) =>
         axios.get(
           `${API_BASE_URL}/financial-metrics?bank_name=${encodeURIComponent(
@@ -156,49 +172,56 @@ export default function Dashboard() {
 
       financialResults.forEach((result, index) => {
         const bankName = selectedBanks[index];
+        const { metrics, timeline } = result.data;
+
         bankFinancialMap[bankName] = result.data;
 
-        // Add stock price data to results
-        resultsData.stock_price[bankName] = result.data.timeline.map(
-          (entry) => ({
+        // Stock price data
+        resultsData.stock_price[bankName] = timeline
+          .filter((entry) => entry.date && entry.stock_price)
+          .map((entry) => ({
             date: entry.date,
-            value: entry.stock_price,
-          })
-        );
+            value: Number(entry.stock_price) || 0,
+          }));
 
-        // Create synthetic IT efficiency data based on available metrics
+        // IT Efficiency data
         resultsData.it_efficiency[bankName] = {
-          value: result.data.stats.cloud_adoption * 10, // Scale for visualization
-          growth: result.data.stats.rnd_growth * 100,
+          value: Number(metrics.avg_it_spending) || 0,
+          growth: Number(metrics.digital_growth) || 0,
+          cloudAdoption: Number(metrics.cloud_adoption) || 0,
         };
 
-        // Add digital transactions data (using digital_mentions as proxy)
+        // Digital transactions
         resultsData.digital_transactions[bankName] = {
-          mean: result.data.stats.avg_it_news,
-          growth_rate: result.data.stats.rnd_growth * 100, // Using R&D growth as proxy
+          mean: Number(metrics.avg_digital_transactions) || 0,
+          growth_rate: Number(metrics.digital_growth) || 0,
+        };
+
+        // Stats data
+        resultsData.stats[bankName] = {
+          avg_it_news: Number(metrics.avg_it_news_count) || 0,
+          avg_sentiment: Number(metrics.avg_it_sentiment) || 0,
+          rnd_growth: Number(metrics.rnd_growth) || 0,
+          cloud_adoption: Number(metrics.cloud_adoption) || 0,
+          mobile_growth: Number(metrics.mobile_user_growth) || 0,
         };
       });
 
       setBankFinancialData(bankFinancialMap);
 
-      // 2. Fetch comparison data for all selected banks
+      // Fetch comparison data if multiple banks selected
       if (selectedBanks.length > 1) {
-        const comparisonResponse = await axios.get(
-          `${API_BASE_URL}/compare-banks?${selectedBanks
-            .map((bank) => `bank_names=${encodeURIComponent(bank)}`)
-            .join("&")}`
-        );
-        setBankComparisonData(comparisonResponse.data);
-      }
-
-      // 3. If we have a specific bank selected, get the detailed IT impact analysis
-      if (activeBank) {
-        const detailResponse = await axios.get(
-          `${API_BASE_URL}/it-impact-analysis?bank_name=${encodeURIComponent(
-            activeBank
-          )}`
-        );
-        // Additional data can be integrated here
+        try {
+          const comparisonResponse = await axios.get(
+            `${API_BASE_URL}/compare-banks?${selectedBanks
+              .map((bank) => `bank_names=${encodeURIComponent(bank)}`)
+              .join("&")}`
+          );
+          resultsData.comparison = comparisonResponse.data;
+        } catch (error) {
+          console.error("Error fetching comparison data:", error);
+          resultsData.comparison = [];
+        }
       }
 
       setAnalysisResults(resultsData);
@@ -228,17 +251,24 @@ export default function Dashboard() {
         icon: <BarChart3 className="text-blue-500" />,
       },
       {
-        title: "Metrics Evaluated",
-        value: selectedMetrics.length > 0 ? selectedMetrics.length : "All",
-        icon: <PieChart className="text-purple-500" />,
+        title: "Avg Stock Price",
+        value: `₹${(
+          Object.values(analysisResults.stats).reduce(
+            (sum, stats) => sum + (stats.avg_stock_price || 0),
+            0
+          ) / selectedBanks.length
+        ).toFixed(2)}`,
+        icon: <LineChart className="text-green-500" />,
       },
       {
-        title: "Time Period",
-        value: `${format(dateRange.start, "MMM d, yyyy")} - ${format(
-          dateRange.end,
-          "MMM d, yyyy"
-        )}`,
-        icon: <Calendar className="text-green-500" />,
+        title: "Total R&D Spend",
+        value: `₹${(
+          Object.values(analysisResults.stats).reduce(
+            (sum, stats) => sum + (stats.total_rnd || 0),
+            0
+          ) / 10000000
+        ).toFixed(1)} Cr`,
+        icon: <TrendingUp className="text-purple-500" />,
       },
     ];
 
@@ -246,7 +276,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {stats.map((stat, i) => (
           <Card key={i} className="shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="flex items-center gap-4">
+            <CardContent className="flex items-center gap-4 p-4">
               <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                 {stat.icon}
               </div>
@@ -271,133 +301,198 @@ export default function Dashboard() {
       .join(" ");
   };
 
+  const fetchRiskMetrics = async (bankName) => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/risk-metrics/${bankName}`
+      );
+      setRiskMetrics(response.data);
+    } catch (error) {
+      console.error("Error fetching risk metrics:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch risk metrics",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchMonteCarloForecast = async (bankName, days = 30) => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/monte-carlo-forecast/${bankName}?days=${days}`
+      );
+      setMonteCarloForecast(response.data);
+    } catch (error) {
+      console.error("Error fetching Monte Carlo forecast:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch forecast data",
+        variant: "destructive",
+      });
+    }
+  };
+
   const renderBankMetricsTable = () => {
-    if (!bankFinancialData || Object.keys(bankFinancialData).length === 0)
-      return null;
+    if (!analysisResults?.stats) return null;
 
     return (
       <Card className="shadow-sm border-0">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-gray-50 dark:bg-gray-800">
-                <TableRow>
-                  <TableHead className="text-left font-semibold">
-                    Bank
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    Avg IT News
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    Avg Sentiment
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    R&D Growth
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    Cloud Adoption
-                  </TableHead>
+          <Table>
+            <TableHeader className="bg-gray-50 dark:bg-gray-800">
+              <TableRow>
+                <TableHead>Bank</TableHead>
+                <TableHead className="text-right">IT News</TableHead>
+                <TableHead className="text-right">Sentiment</TableHead>
+                <TableHead className="text-right">R&D Growth</TableHead>
+                <TableHead className="text-right">Mobile Growth</TableHead>
+                <TableHead className="text-right">Cloud Adoption</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Object.entries(analysisResults.stats).map(([bank, stats]) => (
+                <TableRow key={bank}>
+                  <TableCell className="flex items-center gap-2">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: bankColors[bank] }}
+                    />
+                    {bank}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {stats.avg_it_news.toFixed(1)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {stats.avg_sentiment > 0 ? "😊" : "😞"}{" "}
+                    {stats.avg_sentiment.toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span
+                      className={
+                        stats.rnd_growth >= 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }
+                    >
+                      {stats.rnd_growth.toFixed(1)}%
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {stats.mobile_growth.toFixed(1)}%
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {(stats.cloud_adoption * 100).toFixed(1)}%
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {Object.entries(bankFinancialData).map(([bank, data]) => (
-                  <TableRow
-                    key={bank}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                  >
-                    <TableCell className="font-medium flex items-center gap-2">
-                      <div
-                        className="h-3 w-3 rounded-full"
-                        style={{
-                          backgroundColor: bankColors[bank] || "#CBD5E1",
-                        }}
-                      />
-                      {bank}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {data.stats.avg_it_news.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {data.stats.avg_sentiment.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span
-                        className={
-                          data.stats.rnd_growth >= 0
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }
-                      >
-                        {(data.stats.rnd_growth * 100).toFixed(2)}%
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {data.stats.cloud_adoption.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     );
   };
 
   const renderComparisonTable = () => {
-    if (!bankComparisonData || bankComparisonData.length === 0) return null;
+    if (!analysisResults?.comparison?.length) return null;
 
     return (
       <Card className="shadow-sm border-0">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-gray-50 dark:bg-gray-800">
-                <TableRow>
-                  <TableHead className="text-left font-semibold">
-                    Bank
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    Avg R&D
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    Total IT News
-                  </TableHead>
-                  <TableHead className="text-right font-semibold">
-                    Cloud Score
-                  </TableHead>
+          <Table>
+            <TableHeader className="bg-gray-50 dark:bg-gray-800">
+              <TableRow>
+                <TableHead>Bank</TableHead>
+                <TableHead className="text-right">IT Spending</TableHead>
+                <TableHead className="text-right">
+                  Digital Transactions
+                </TableHead>
+                <TableHead className="text-right">Cloud Score</TableHead>
+                <TableHead className="text-right">Fintech Partners</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {analysisResults.comparison.map((bank) => (
+                <TableRow key={bank.bank_name}>
+                  <TableCell className="flex items-center gap-2">
+                    <div
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: bankColors[bank.bank_name] }}
+                    />
+                    {bank.bank_name}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    ₹{(bank.avg_it_spending / 1000000).toFixed(1)}M
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {(bank.total_digital / 1000).toFixed(1)}K
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {(bank.avg_cloud_adoption * 100).toFixed(1)}%
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {bank.total_fintech_partnerships}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {bankComparisonData.map((item) => (
-                  <TableRow
-                    key={item.bank_name}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                  >
-                    <TableCell className="font-medium flex items-center gap-2">
-                      <div
-                        className="h-3 w-3 rounded-full"
-                        style={{
-                          backgroundColor:
-                            bankColors[item.bank_name] || "#CBD5E1",
-                        }}
-                      />
-                      {item.bank_name}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.avg_rnd.toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.total_it_news}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.cloud_score.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const RiskMetricsCard = () => {
+    if (!riskMetrics || Object.keys(riskMetrics).length === 0) return null;
+
+    return (
+      <Card className="shadow-sm border-0 h-full">
+        <CardHeader className="bg-gray-50 dark:bg-gray-800 py-4 px-6 border-b">
+          <CardTitle className="text-sm font-medium flex items-center">
+            <BarChart3 className="h-4 w-4 text-blue-500 mr-2" />
+            Risk Metrics Profile
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 h-[400px]">
+          <MemoRiskMetricsRadarChart metrics={riskMetrics} />
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const MonteCarloForecastCard = () => {
+    if (!monteCarloForecast) return null;
+
+    return (
+      <Card className="shadow-sm border-0 h-full">
+        <CardHeader className="bg-gray-50 dark:bg-gray-800 py-4 px-6 border-b">
+          <CardTitle className="text-sm font-medium flex items-center">
+            <TrendingUp className="h-4 w-4 text-green-500 mr-2" />
+            Monte Carlo Forecast ({monteCarloForecast.forecast_days} days)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6 h-[400px]">
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <p className="text-sm text-gray-500">Current Price</p>
+              <p className="text-lg font-semibold">
+                ₹{monteCarloForecast.current_price.toFixed(2)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Expected Return</p>
+              <p className="text-lg font-semibold">
+                {(monteCarloForecast.expected_return * 100).toFixed(2)}%
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Volatility</p>
+              <p className="text-lg font-semibold">
+                {(monteCarloForecast.volatility * 100).toFixed(2)}%
+              </p>
+            </div>
           </div>
+          <MemoMonteCarloForecastChart forecast={monteCarloForecast} />
         </CardContent>
       </Card>
     );
@@ -578,7 +673,7 @@ export default function Dashboard() {
                       {renderStatsCards()}
 
                       <Tabs defaultValue="overview" className="">
-                        <TabsList className="grid w-full grid-cols-3 rounded-lg">
+                        <TabsList className="grid w-full grid-cols-4 rounded-lg">
                           <TabsTrigger
                             value="overview"
                             className="data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700"
@@ -597,6 +692,12 @@ export default function Dashboard() {
                           >
                             Comparison
                           </TabsTrigger>
+                          <TabsTrigger
+                            value="risk"
+                            className="data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700"
+                          >
+                            Risk
+                          </TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="overview" className="pt-6">
@@ -610,7 +711,7 @@ export default function Dashboard() {
                                   </CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-6">
-                                  <StockPriceChart
+                                  <MemoStockChart
                                     data={analysisResults.stock_price}
                                   />
                                 </CardContent>
@@ -626,8 +727,9 @@ export default function Dashboard() {
                                   </CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-6">
-                                  <GrowthRateChart
+                                  <MemoGrowthChart
                                     data={analysisResults.stock_price}
+                                    title="Digital Transactions Growth"
                                   />
                                 </CardContent>
                               </Card>
@@ -644,6 +746,11 @@ export default function Dashboard() {
                                 <CardContent className="p-6">
                                   <ITEfficiencyChart
                                     data={analysisResults.it_efficiency}
+                                    metrics={[
+                                      "value",
+                                      "growth",
+                                      "cloudAdoption",
+                                    ]}
                                   />
                                 </CardContent>
                               </Card>
@@ -666,8 +773,9 @@ export default function Dashboard() {
                                   </CardTitle>
                                 </CardHeader>
                                 <CardContent className="p-6">
-                                  <ITEfficiencyChart
+                                  <MemoEfficiencyChart
                                     data={analysisResults.it_efficiency}
+                                    metrics={["cloudAdoption"]}
                                   />
                                 </CardContent>
                               </Card>
@@ -675,6 +783,15 @@ export default function Dashboard() {
                           </div>
 
                           {renderComparisonTable()}
+                        </TabsContent>
+
+                        <TabsContent value="risk" className="pt-6">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <RiskMetricsCard metrics={riskMetrics} />
+                            <MonteCarloForecastCard
+                              forecast={monteCarloForecast}
+                            />
+                          </div>
                         </TabsContent>
                       </Tabs>
                     </>

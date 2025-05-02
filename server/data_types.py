@@ -1,16 +1,17 @@
-from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from datetime import date
 
 class BankDataInput(BaseModel):
     bank_name: str
     date: str
-    stock_price: Optional[float] = None
-    digital_transactions: Optional[int] = None
-    it_spending: Optional[float] = None
-    mobile_users: Optional[int] = None
+    stock_price: float
+    digital_transactions: int
+    it_spending: float
+    mobile_users: int
 
 class AnalysisRequest(BaseModel):
     bank_names: List[str]
-    start_date: str
-    end_date: str
-    metrics: List[str]
+    metrics: Optional[List[str]] = None
+    start_date: Optional[str] = None  
+    end_date: Optional[str] = None
