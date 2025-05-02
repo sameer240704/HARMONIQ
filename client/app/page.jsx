@@ -241,8 +241,54 @@ export default function Dashboard() {
     }
   };
 
+  const calculateAvgStockPrice = (bankNames, analysisResults) => {
+    console.log(bankNames);
+    const result = bankNames.reduce(
+      (acc, bankName) => {
+        const bankData = analysisResults.stock_price[bankName];
+
+        if (!Array.isArray(bankData)) {
+          console.warn(`No stock data for bank: ${bankName}`);
+          return acc;
+        }
+
+        const validDays = bankData.filter(
+          (day) => day && typeof day.value === "number" && !isNaN(day.value)
+        );
+
+        if (validDays.length === 0) {
+          console.warn(`No valid stock prices for bank: ${bankName}`);
+          return acc;
+        }
+
+        const bankSum = validDays.reduce((sum, day) => sum + day.value, 0);
+        const bankAvg = bankSum / validDays.length;
+
+        acc.bankAverages[bankName] = bankAvg;
+        acc.totalSum += bankAvg;
+
+        return acc;
+      },
+      { totalSum: 0, bankAverages: {} }
+    );
+
+    result.formattedTotal = new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(result.totalSum);
+
+    return result;
+  };
+
   const renderStatsCards = () => {
     if (!analysisResults) return null;
+
+    const { totalSum, bankAverages, formattedTotal } = calculateAvgStockPrice(
+      selectedBanks,
+      analysisResults
+    );
 
     const stats = [
       {
@@ -252,19 +298,14 @@ export default function Dashboard() {
       },
       {
         title: "Avg Stock Price",
-        value: `₹${(
-          Object.values(analysisResults.stats).reduce(
-            (sum, stats) => sum + (stats.avg_stock_price || 0),
-            0
-          ) / selectedBanks.length
-        ).toFixed(2)}`,
+        value: formattedTotal,
         icon: <LineChart className="text-green-500" />,
       },
       {
         title: "Total R&D Spend",
         value: `₹${(
-          Object.values(analysisResults.stats).reduce(
-            (sum, stats) => sum + (stats.total_rnd || 0),
+          Object.values(analysisResults.it_efficiency).reduce(
+            (sum, eff) => sum + (eff.value || 0),
             0
           ) / 10000000
         ).toFixed(1)} Cr`,
