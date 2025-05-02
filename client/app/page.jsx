@@ -128,21 +128,13 @@ export default function Dashboard() {
       setNews(response.data.news || []);
     } catch (error) {
       console.error("Error fetching news:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch news",
-        variant: "destructive",
-      });
+      toast("Failed to fetch news");
     }
   };
 
   const runAnalysis = async () => {
     if (selectedBanks.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please select at least one bank",
-        variant: "destructive",
-      });
+      toast("Please select at least one bank");
       return;
     }
 
@@ -225,17 +217,10 @@ export default function Dashboard() {
       }
 
       setAnalysisResults(resultsData);
-      toast({
-        title: "Success",
-        description: "Analysis completed successfully",
-      });
+      toast("Analysis completed successfully!");
     } catch (error) {
       console.error("Error running analysis:", error);
-      toast({
-        title: "Error",
-        description: error.response?.data?.detail || "Failed to run analysis",
-        variant: "destructive",
-      });
+      toast("Failed to run analysis");
     } finally {
       setLoading(false);
     }
@@ -350,11 +335,7 @@ export default function Dashboard() {
       setRiskMetrics(response.data);
     } catch (error) {
       console.error("Error fetching risk metrics:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch risk metrics",
-        variant: "destructive",
-      });
+      toast("Failed to fetch risk metrics");
     }
   };
 
@@ -366,11 +347,7 @@ export default function Dashboard() {
       setMonteCarloForecast(response.data);
     } catch (error) {
       console.error("Error fetching Monte Carlo forecast:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch forecast data",
-        variant: "destructive",
-      });
+      toast("Failed to fetch forecast data");
     }
   };
 
