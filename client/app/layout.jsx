@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "HARMONIQ",
-  description: "Banking in IT Sector",
+  description: "Banking in IT Sector (MBA Finance)",
 };
 
 export default function RootLayout({ children }) {
